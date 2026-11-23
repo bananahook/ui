@@ -151,11 +151,12 @@ end
 local Library = {}
 
 Library.Unloaded   = false
-Library.Version    = "2.1.0-banana"
+Library.Version    = "2.2.0-banana"
 Library.ForceCheckbox        = false
 Library.ShowToggleFrameInKeybinds = true
 Library.CornerRadius         = 4
 Library.DPIScale             = 1
+Library.CantDrag            = false   -- set by the draggable "Lock" button
 
 Library.Toggles = {}
 Library.Options = {}
@@ -278,16 +279,17 @@ function Library:UpdateColorsUsingRegistry()
 end
 
 local F = {
-    Brand = Enum.Font.SourceSansSemibold,
-    Row   = Enum.Font.SourceSansSemibold,
-    Small = Enum.Font.SourceSans,
+    -- obsidian uses a single font (Enum.Font.Code) for the entire ui
+    Brand = Enum.Font.Code,
+    Row   = Enum.Font.Code,
+    Small = Enum.Font.Code,
 }
 
 -- // --------------------------------------------------------- icon builders
 -- Icons are drawn with pure frames (no external assets, always renders).
 
 local function MakeChevron(SizePX, Direction)
-    -- a "v" made of two rotated bars; Direction: "Down" | "Up" | "Right"
+    -- lucide-style chevron: two 2px bars meeting in a point; Direction: "Down" | "Up" | "Right"
     local Holder = New("Frame", {
         BackgroundTransparency = 1,
         Size = UDim2.fromOffset(SizePX, SizePX),
@@ -296,8 +298,8 @@ local function MakeChevron(SizePX, Direction)
     for I = 0, 1 do
         local Bar = New("Frame", {
             AnchorPoint = Vector2.new(0.5, 0.5),
-            Position = UDim2.new(0.5, I == 0 and -1.5 or 1.5, 0.5, 0),
-            Size = UDim2.fromOffset(1.6, math.floor(SizePX * 0.62)),
+            Position = UDim2.new(0.5, I == 0 and -2 or 2, 0.5, 0),
+            Size = UDim2.fromOffset(2, math.floor(SizePX * 0.66)),
             Rotation = BaseRot + (I == 0 and -45 or 45),
             BorderSizePixel = 0,
             Parent = Holder,
@@ -315,7 +317,7 @@ local function MakeCheck(SizePX, Key)
     local Short = New("Frame", {
         AnchorPoint = Vector2.new(0.5, 0.5),
         Position = UDim2.new(0.32, 0, 0.62, 0),
-        Size = UDim2.fromOffset(1.8, math.max(4, SizePX * 0.32)),
+        Size = UDim2.fromOffset(2, math.max(4, SizePX * 0.34)),
         Rotation = 45,
         BorderSizePixel = 0,
         Parent = Holder,
@@ -323,7 +325,7 @@ local function MakeCheck(SizePX, Key)
     local Long = New("Frame", {
         AnchorPoint = Vector2.new(0.5, 0.5),
         Position = UDim2.new(0.60, 0, 0.42, 0),
-        Size = UDim2.fromOffset(1.8, math.max(6, SizePX * 0.62)),
+        Size = UDim2.fromOffset(2, math.max(6, SizePX * 0.64)),
         Rotation = -45,
         BorderSizePixel = 0,
         Parent = Holder,
@@ -351,12 +353,12 @@ local function MakeMagnifier(SizePX)
         Parent = Holder,
     })
     New("UICorner", { CornerRadius = UDim.new(1, 0), Parent = Lens })
-    local Stroke = New("UIStroke", { Thickness = 1.5, Parent = Lens })
+    local Stroke = New("UIStroke", { Thickness = 2, Parent = Lens })
     S(Stroke, "Color", "DarkText")
     local Handle = New("Frame", {
         AnchorPoint = Vector2.new(0.5, 0.5),
         Position = UDim2.fromScale(0.86, 0.86),
-        Size = UDim2.fromOffset(math.max(4, SizePX * 0.3), 1.5),
+        Size = UDim2.fromOffset(math.max(4, SizePX * 0.32), 2),
         Rotation = 45,
         BorderSizePixel = 0,
         Parent = Holder,
@@ -399,6 +401,130 @@ local function MakeGear(SizePX)
         S(Tooth, "BackgroundColor3", "DarkText")
     end
     return Gear
+end
+
+-- lucide-style tab icons (same set obsidian uses: "user" / "settings" / "key",
+-- plus a few extras), drawn with 2px frame strokes so no external asset is
+-- needed. unknown names fall back to a small dot.
+local function MakeTabIcon(IconName, SizePX)
+    local Name = string.lower(tostring(IconName or ""))
+    local Holder = New("Frame", {
+        BackgroundTransparency = 1,
+        Size = UDim2.fromOffset(SizePX, SizePX),
+    })
+    local function Line(X0, Y0, X1, Y1, Thick)
+        local CX, CY = (X0 + X1) / 2, (Y0 + Y1) / 2
+        local Len = math.sqrt((X1 - X0) ^ 2 + (Y1 - Y0) ^ 2)
+        local Ang = math.deg(math.atan(Y1 - Y0, X1 - X0))
+        local Bar = New("Frame", {
+            AnchorPoint = Vector2.new(0.5, 0.5),
+            Position = UDim2.fromOffset(CX, CY),
+            Size = UDim2.fromOffset(Len, Thick or 2),
+            Rotation = Ang,
+            BorderSizePixel = 0,
+            Parent = Holder,
+        })
+        S(Bar, "BackgroundColor3", "DarkText")
+        return Bar
+    end
+    local function Ring(CX, CY, Diameter, Thick)
+        local Circle = New("Frame", {
+            AnchorPoint = Vector2.new(0.5, 0.5),
+            Position = UDim2.fromOffset(CX, CY),
+            Size = UDim2.fromOffset(Diameter, Diameter),
+            BackgroundTransparency = 1,
+            Parent = Holder,
+        })
+        New("UICorner", { CornerRadius = UDim.new(1, 0), Parent = Circle })
+        local Stroke = New("UIStroke", { Thickness = Thick or 2, Parent = Circle })
+        S(Stroke, "Color", "DarkText")
+        return Circle
+    end
+    if Name == "user" then
+        -- head circle + shoulders arc (pill outline)
+        Ring(SizePX * 0.5, SizePX * 0.32, SizePX * 0.38)
+        local Body = New("Frame", {
+            AnchorPoint = Vector2.new(0.5, 0.5),
+            Position = UDim2.fromOffset(SizePX * 0.5, SizePX * 0.78),
+            Size = UDim2.fromOffset(SizePX * 0.62, SizePX * 0.42),
+            BackgroundTransparency = 1,
+            Parent = Holder,
+        })
+        New("UICorner", {
+            TopLeftRadius = UDim.new(1, 0), TopRightRadius = UDim.new(1, 0),
+            BottomLeftRadius = UDim.new(0, 2), BottomRightRadius = UDim.new(0, 2),
+            Parent = Body,
+        })
+        local BStroke = New("UIStroke", { Thickness = 2, Parent = Body })
+        S(BStroke, "Color", "DarkText")
+    elseif Name == "settings" then
+        -- gear: center ring + 8 teeth
+        Ring(SizePX * 0.5, SizePX * 0.5, SizePX * 0.44)
+        local ToothLen = math.max(3, SizePX * 0.22)
+        local R = SizePX * 0.30
+        for I = 0, 7 do
+            local A = math.rad(I * 45)
+            local CX = SizePX * 0.5 + math.cos(A) * R
+            local CY = SizePX * 0.5 + math.sin(A) * R
+            local Tooth = New("Frame", {
+                AnchorPoint = Vector2.new(0.5, 0.5),
+                Position = UDim2.fromOffset(CX, CY),
+                Size = UDim2.fromOffset(2, ToothLen),
+                Rotation = I * 45,
+                BorderSizePixel = 0,
+                Parent = Holder,
+            })
+            S(Tooth, "BackgroundColor3", "DarkText")
+        end
+    elseif Name == "key" then
+        -- round key: ring at the top-left + diagonal stem with two teeth
+        Ring(SizePX * 0.34, SizePX * 0.34, SizePX * 0.42)
+        Line(SizePX * 0.60, SizePX * 0.60, SizePX * 0.88, SizePX * 0.88)
+        Line(SizePX * 0.88, SizePX * 0.60, SizePX * 0.88, SizePX * 0.74)
+        Line(SizePX * 0.72, SizePX * 0.76, SizePX * 0.72, SizePX * 0.90)
+    elseif Name == "bell" then
+        Ring(SizePX * 0.5, SizePX * 0.42, SizePX * 0.5)
+        Line(SizePX * 0.16, SizePX * 0.78, SizePX * 0.84, SizePX * 0.78)
+        Line(SizePX * 0.42, SizePX * 0.86, SizePX * 0.58, SizePX * 0.86)
+    elseif Name == "star" then
+        local CX, CY = SizePX * 0.5, SizePX * 0.5
+        local Outer = SizePX * 0.46
+        for I = 0, 4 do
+            local A0 = math.rad(-90 + I * 72)
+            local A1 = math.rad(-90 + I * 72 + 36)
+            Line(CX, CY, CX + math.cos(A0) * Outer, CY + math.sin(A0) * Outer)
+            Line(CX + math.cos(A0) * Outer, CY + math.sin(A0) * Outer,
+                CX + math.cos(A1) * Outer * 0.45, CY + math.sin(A1) * Outer * 0.45)
+        end
+    elseif Name == "home" then
+        Line(SizePX * 0.10, SizePX * 0.52, SizePX * 0.5, SizePX * 0.14)
+        Line(SizePX * 0.5, SizePX * 0.14, SizePX * 0.90, SizePX * 0.52)
+        Line(SizePX * 0.22, SizePX * 0.46, SizePX * 0.22, SizePX * 0.88)
+        Line(SizePX * 0.78, SizePX * 0.46, SizePX * 0.78, SizePX * 0.88)
+        Line(SizePX * 0.22, SizePX * 0.88, SizePX * 0.78, SizePX * 0.88)
+    elseif Name == "wrench" or Name == "sliders" then
+        Line(SizePX * 0.18, SizePX * 0.18, SizePX * 0.82, SizePX * 0.82)
+        Ring(SizePX * 0.24, SizePX * 0.24, SizePX * 0.30)
+        Ring(SizePX * 0.76, SizePX * 0.76, SizePX * 0.30)
+    elseif Name == "globe" then
+        Ring(SizePX * 0.5, SizePX * 0.5, SizePX * 0.84)
+        Line(SizePX * 0.08, SizePX * 0.5, SizePX * 0.92, SizePX * 0.5)
+        Line(SizePX * 0.5, SizePX * 0.08, SizePX * 0.5, SizePX * 0.92)
+    elseif Name == "search" then
+        local Mag = MakeMagnifier(SizePX)
+        Mag.Parent = Holder
+    else
+        local Dot = New("Frame", {
+            AnchorPoint = Vector2.new(0.5, 0.5),
+            Position = UDim2.fromScale(0.5, 0.5),
+            Size = UDim2.fromOffset(math.max(3, SizePX * 0.22), math.max(3, SizePX * 0.22)),
+            BorderSizePixel = 0,
+            Parent = Holder,
+        })
+        New("UICorner", { CornerRadius = UDim.new(1, 0), Parent = Dot })
+        S(Dot, "BackgroundColor3", "DarkText")
+    end
+    return Holder
 end
 
 -- // --------------------------------------------------- banana icon (real png)
@@ -728,20 +854,31 @@ function Library:InitRoot()
         Parent = Wrapper,
     })
     Library.PopupOverlay = PopupOverlay
-    GiveSignal(PopupOverlay.InputBegan:Connect(function(IO)
-        if IO.UserInputType == Enum.UserInputType.MouseButton1 then
-            for _, Child in ipairs(PopupOverlay:GetChildren()) do
-                if Child:IsA("GuiObject") then
-                    local P = Child.AbsolutePosition
-                    local Sz = Child.AbsoluteSize
-                    if IO.Position.X >= P.X and IO.Position.X <= P.X + Sz.X
-                    and IO.Position.Y >= P.Y and IO.Position.Y <= P.Y + Sz.Y then
-                        return
-                    end
+
+    -- dismiss the open popup on any click/tap that lands outside it. this is
+    -- a global input hook (like obsidian's CloseMenus), so it works with both
+    -- the mouse and touch, and the tap still reaches the control below it.
+    local function IsDismissInput(IO)
+        return IO.UserInputState == Enum.UserInputState.Begin
+            and (IO.UserInputType == Enum.UserInputType.MouseButton1
+                or IO.UserInputType == Enum.UserInputType.Touch)
+    end
+    GiveSignal(UserInputService.InputBegan:Connect(function(IO)
+        if not PopupOverlay.Visible or not IsDismissInput(IO) then
+            return
+        end
+        local Pos = IO.Position
+        for _, Child in ipairs(PopupOverlay:GetChildren()) do
+            if Child:IsA("GuiObject") and Child.Visible then
+                local P = Child.AbsolutePosition
+                local Sz = Child.AbsoluteSize
+                if Pos.X >= P.X and Pos.X <= P.X + Sz.X
+                and Pos.Y >= P.Y and Pos.Y <= P.Y + Sz.Y then
+                    return
                 end
             end
-            Library:ClosePopup()
         end
+        Library:ClosePopup()
     end))
 
     -- tooltip surface (own gui so it is always on top)
@@ -762,7 +899,7 @@ function Library:InitRoot()
         Size = UDim2.fromOffset(0, 0),
         AutomaticSize = Enum.AutomaticSize.XY,
         Font = F.Small,
-        TextSize = 12,
+        TextSize = 13,
         TextColor3 = Library.Scheme.ActiveText,
         Text = "",
         Visible = false,
@@ -857,10 +994,13 @@ end
 
 -- // ------------------------------------------------------------- dragging
 
-local function MakeDraggable(DragSurface, Target)
+local function MakeDraggable(DragSurface, Target, IsMainWindow)
     local Dragging, DragInput, StartPos, StartPoint
 
     GiveSignal(DragSurface.InputBegan:Connect(function(IO)
+        if IsMainWindow and Library.CantDrag then
+            return
+        end
         if IO.UserInputType == Enum.UserInputType.MouseButton1
         or IO.UserInputType == Enum.UserInputType.Touch then
             Dragging = true
@@ -895,17 +1035,38 @@ end
 
 -- // ------------------------------------------------------------- window
 --
--- juju-style chrome: a 575x450 pure-black window with a 100px "section"-tinted
--- sidebar on the left. brand block top-left (banana png + one-line two-tone
--- name), tab list below it with a 1px accent indicator, search box at the
--- bottom of the sidebar, two content columns on the black right side.
+-- juju-style chrome: a 648x540 pure-black window (obsidian's 720x600, a
+-- touch smaller) with a section-tinted sidebar on the left. brand block
+-- top-left (banana png + one-line two-tone name), obsidian-sized tab list
+-- (30px rows with lucide-style icons) below it, search box at the bottom of
+-- the sidebar, two content columns on the black right side. the window is
+-- clamped to the viewport like obsidian so it always fits the screen.
 
-local SIDEBAR_W    = 132
-local TABS_TOP     = 68
-local TAB_STEP     = 15
-local CONTENT_LEFT = 133
+local SIDEBAR_W    = 146
+local TABS_TOP     = 50
+local TAB_STEP     = 32
+local CONTENT_LEFT = 147
 
 local CurrentWindow
+
+-- obsidian's viewport clamping: never bigger than viewport - 64
+local function ClampToViewport(Size)
+    local ViewW, ViewH = 1920, 1080
+    pcall(function()
+        local Cam = workspace.CurrentCamera
+        if Cam then
+            local VP = Cam.ViewportSize
+            ViewW, ViewH = VP.X, VP.Y
+        end
+    end)
+    local MaxW = math.max(240, ViewW - 64)
+    local MaxH = math.max(200, ViewH - 64)
+    local MinW = math.min(480, MaxW)
+    local MinH = math.min(360, MaxH)
+    local W = Clamp(Size.X.Offset, MinW, MaxW)
+    local H = Clamp(Size.Y.Offset, MinH, MaxH)
+    return UDim2.fromOffset(W, H)
+end
 
 function Library:CreateWindow(Info)
     Library:InitRoot()
@@ -921,7 +1082,7 @@ function Library:CreateWindow(Info)
     Window.TabCount = 0
     CurrentWindow = Window
 
-    local Size = Info.Size or UDim2.fromOffset(575, 450)
+    local Size = ClampToViewport(Info.Size or UDim2.fromOffset(648, 540))
 
     local Frame = New("Frame", {
         AnchorPoint = Vector2.new(0.5, 0.5),
@@ -962,15 +1123,17 @@ function Library:CreateWindow(Info)
     })
     S(Divider, "BackgroundColor3", "Background")
 
-    -- drag surface: covers the sidebar under the interactive children -------
+    -- drag surface: sits BELOW the sidebar (zindex 1) so the tab buttons and
+    -- search box keep receiving input; clicks on empty sidebar areas fall
+    -- through the non-active sidebar frame onto this zone and drag the window
     local DragZone = New("Frame", {
         BackgroundTransparency = 1,
         Size = UDim2.new(0, SIDEBAR_W, 1, 0),
-        ZIndex = 2,
+        ZIndex = 1,
         Active = true,
         Parent = Frame,
     })
-    MakeDraggable(DragZone, Frame)
+    MakeDraggable(DragZone, Frame, true)
 
     -- brand block ------------------------------------------------------------
     do
@@ -1021,7 +1184,7 @@ function Library:CreateWindow(Info)
         Position = UDim2.fromOffset(44, 11),
         Size = UDim2.new(1, -48, 0, 28),
         Font = F.Brand,
-        TextSize = 13,
+        TextSize = 14,
         TextXAlignment = Enum.TextXAlignment.Left,
         TextYAlignment = Enum.TextYAlignment.Center,
         TextTruncate = Enum.TextTruncate.AtEnd,
@@ -1086,7 +1249,7 @@ function Library:CreateWindow(Info)
         Position = UDim2.fromOffset(19, 0),
         Size = UDim2.new(1, -22, 1, 0),
         Font = F.Small,
-        TextSize = 12,
+        TextSize = 13,
         Text = "",
         PlaceholderText = "search",
         PlaceholderColor3 = Library.Scheme.InactiveText,
@@ -1131,7 +1294,7 @@ function Library:CreateWindow(Info)
         Position = UDim2.new(1, -8, 1, -4),
         Size = UDim2.new(1, -16, 0, 12),
         Font = F.Small,
-        TextSize = 11,
+        TextSize = 12,
         TextXAlignment = Enum.TextXAlignment.Right,
         Text = Info.Footer or "",
         ZIndex = 3,
@@ -1185,13 +1348,27 @@ function Library:CreateWindow(Info)
         GiveSignal(UserInputService.InputChanged:Connect(function(IO)
             if Resizing and IO.UserInputType == Enum.UserInputType.MouseMovement then
                 local Delta = IO.Position - StartPoint
-                local W = Clamp(StartSize.X.Offset + Delta.X, 480, 1200)
-                local H = Clamp(StartSize.Y.Offset + Delta.Y, 300, 800)
-                Frame.Size = UDim2.fromOffset(W, H)
+                Frame.Size = ClampToViewport(UDim2.fromOffset(
+                    StartSize.X.Offset + Delta.X,
+                    StartSize.Y.Offset + Delta.Y
+                ))
                 Window.Size = Frame.Size
             end
         end))
     end
+
+    -- keep the window inside the viewport when the camera rotates/resizes
+    -- (orientation changes on mobile), like obsidian's clamping
+    pcall(function()
+        local Cam = workspace.CurrentCamera
+        GiveSignal(Cam:GetPropertyChangedSignal("ViewportSize"):Connect(function()
+            if not Frame.Visible then
+                return
+            end
+            Frame.Size = ClampToViewport(Frame.Size)
+            Window.Size = Frame.Size
+        end))
+    end)
 
     -- window api -------------------------------------------------------------
     function Window:SetTitle(Text, AccentText)
@@ -1228,20 +1405,20 @@ function Library:CreateWindow(Info)
         Frame.Visible = false
     end
 
-    function Window:Toggle()
-        if Frame.Visible then
-            Tween(WindowScale, 0.09, { Scale = 0.97 }, Enum.EasingStyle.Quad)
-            task.delay(0.09, function()
-                if WindowScale.Scale < 1 then
-                    Frame.Visible = false
-                end
-                WindowScale.Scale = 1
-            end)
-        else
+    function Window:Toggle(Value)
+        if Value == nil then
+            Value = not Frame.Visible
+        end
+        if Value then
             Frame.Visible = true
             WindowScale.Scale = 0.97
             Tween(WindowScale, 0.14, { Scale = 1 }, Enum.EasingStyle.Exponential)
+        else
+            -- obsidian hides instantly (animations off by default there)
+            Frame.Visible = false
+            WindowScale.Scale = 1
         end
+        Library.Toggled = Value
     end
 
     -- tabs -------------------------------------------------------------------
@@ -1255,40 +1432,60 @@ function Library:CreateWindow(Info)
         Tab.IconName = IconName
         TabLayoutOrder = TabLayoutOrder + 1
 
-        -- skeet tab: 12px lowercase-ish text, active gets indented + a 1px
-        -- accent marker pinned to the sidebar's left edge
+        -- obsidian tab: 30px row, 16px lucide-style icon + 14px code-font
+        -- label, active state is brightness (like obsidian: 0.5 -> 0 transparency)
+        local IconName = IconName or ((string.lower(tostring(Name or "")):find("setting")) and "settings" or nil)
         local Button = New("TextButton", {
             BackgroundTransparency = 1,
             BorderSizePixel = 0,
-            Size = UDim2.new(1, 0, 0, 12),
-            Font = F.Row,
-            TextSize = 12,
-            Text = Tab.Name,
-            TextXAlignment = Enum.TextXAlignment.Left,
-            TextTruncate = Enum.TextTruncate.AtEnd,
-            TextColor3 = Library.Scheme.InactiveText,
+            Size = UDim2.new(1, 0, 0, 30),
+            Text = "",
+            AutoButtonColor = false,
             LayoutOrder = TabLayoutOrder,
             ZIndex = 4,
             Parent = TabList,
         })
-        local ButtonPad = New("UIPadding", {
-            PaddingLeft = UDim.new(0, 15),
-            Parent = Button,
-        })
-        local Indicator = New("Frame", {
-            BackgroundColor3 = Library.Scheme.Accent,
-            BackgroundTransparency = 0.5,
-            BorderSizePixel = 0,
-            Position = UDim2.fromOffset(-15, 0),
-            Size = UDim2.fromOffset(1, 12),
-            Visible = false,
+        local TabIcon
+        if IconName and IconName ~= "" then
+            TabIcon = MakeTabIcon(IconName, 16)
+            TabIcon.Position = UDim2.fromOffset(12, 7)
+            TabIcon.ZIndex = 5
+            TabIcon.Parent = Button
+        end
+        local Label = New("TextLabel", {
+            BackgroundTransparency = 1,
+            Position = UDim2.fromOffset(TabIcon and 34 or 13, 0),
+            Size = UDim2.new(1, TabIcon and -40 or -19, 1, 0),
+            Font = F.Row,
+            TextSize = 14,
+            Text = Tab.Name,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            TextTruncate = Enum.TextTruncate.AtEnd,
+            TextColor3 = Library.Scheme.InactiveText,
+            TextTransparency = 0.5,
             ZIndex = 5,
             Parent = Button,
         })
-        S(Indicator, "BackgroundColor3", "Accent")
+        S(Label, "TextColor3", "InactiveText")
         Tab.Button = Button
-        Tab.Indicator = Indicator
-        Tab.ButtonPad = ButtonPad
+        Tab.Label = Label
+        Tab.TabIcon = TabIcon
+
+        -- dim every frame part of the icon for the idle state
+        local function SetIconDim(Dim)
+            if not TabIcon then
+                return
+            end
+            for _, Seg in ipairs(TabIcon:GetDescendants()) do
+                if Seg:IsA("Frame") then
+                    Seg.BackgroundTransparency = Dim
+                elseif Seg:IsA("UIStroke") then
+                    Seg.Transparency = Dim
+                end
+            end
+        end
+        Tab.SetIconDim = SetIconDim
+        SetIconDim(0.5)
 
         local Page = New("Frame", {
             BackgroundTransparency = 1,
@@ -1333,7 +1530,7 @@ function Library:CreateWindow(Info)
             Position = UDim2.fromOffset(15, -5),
             Size = UDim2.new(0, 200, 0, 10),
             Font = F.Row,
-            TextSize = 12,
+            TextSize = 13,
             TextXAlignment = Enum.TextXAlignment.Left,
             Text = "Warning",
             TextColor3 = Library.Scheme.Red,
@@ -1346,7 +1543,7 @@ function Library:CreateWindow(Info)
             Size = UDim2.new(1, -20, 0, 0),
             AutomaticSize = Enum.AutomaticSize.Y,
             Font = F.Small,
-            TextSize = 12,
+            TextSize = 13,
             TextXAlignment = Enum.TextXAlignment.Left,
             TextYAlignment = Enum.TextYAlignment.Top,
             TextWrapped = true,
@@ -1408,26 +1605,28 @@ function Library:CreateWindow(Info)
         function Tab:Select()
             for _, Other in pairs(Window.Tabs) do
                 Other.Page.Visible = false
-                Other.Indicator.Visible = false
-                Other.ButtonPad.PaddingLeft = UDim.new(0, 15)
-                S(Other.Button, "TextColor3", "InactiveText")
+                Tween(Other.Label, 0.12, { TextTransparency = 0.5 })
+                S(Other.Label, "TextColor3", "InactiveText")
+                if Other.SetIconDim then
+                    Other.SetIconDim(0.5)
+                end
             end
             Page.Visible = true
-            Indicator.Visible = true
-            ButtonPad.PaddingLeft = UDim.new(0, 20)
-            S(Button, "TextColor3", "ActiveText")
+            Tween(Label, 0.12, { TextTransparency = 0 })
+            S(Label, "TextColor3", "ActiveText")
+            SetIconDim(0)
             Window.ActiveTab = Tab
             Library:UpdateSearch(SearchBox.Text)
         end
 
         GiveSignal(Button.MouseEnter:Connect(function()
             if Window.ActiveTab ~= Tab then
-                Tween(Button, 0.12, { TextColor3 = Library.Scheme.Highlight })
+                Tween(Label, 0.12, { TextTransparency = 0.25 })
             end
         end))
         GiveSignal(Button.MouseLeave:Connect(function()
             if Window.ActiveTab ~= Tab then
-                Tween(Button, 0.17, { TextColor3 = Library.Scheme.InactiveText })
+                Tween(Label, 0.17, { TextTransparency = 0.5 })
             end
         end))
         GiveSignal(Button.MouseButton1Click:Connect(function()
@@ -1447,7 +1646,7 @@ function Library:CreateWindow(Info)
     end
 
     function Window:AddKeyTab(Name, IconName)
-        local Tab = Window:AddTab(Name or "Key System", IconName)
+        local Tab = Window:AddTab(Name or "Key System", IconName or "key")
         function Tab:AddKeyBox(Callback)
             local Box = Tab:CreateHolder("Key", "Left")
             local Input = New("TextBox", {
@@ -1456,7 +1655,7 @@ function Library:CreateWindow(Info)
                 Position = UDim2.fromOffset(10, 6),
                 Size = UDim2.new(1, -20, 0, 20),
                 Font = F.Row,
-                TextSize = 12,
+                TextSize = 13,
                 Text = "",
                 PlaceholderText = "enter key...",
                 PlaceholderColor3 = Library.Scheme.InactiveText,
@@ -1477,7 +1676,7 @@ function Library:CreateWindow(Info)
                 AnchorPoint = Vector2.new(1, 0),
                 Size = UDim2.new(1, -20, 0, 16),
                 Font = F.Row,
-                TextSize = 12,
+                TextSize = 13,
                 Text = "confirm",
                 AutoButtonColor = false,
                 TextColor3 = Library.Scheme.DarkText,
@@ -1498,28 +1697,96 @@ function Library:CreateWindow(Info)
     -- compat: stock windows also expose these
     Window.ActiveTab = nil
 
-    -- mobile toggle button -----------------------------------------------------
-    if UserInputService.TouchEnabled then
-        local Side = Info.MobileButtonsSide == "Left" and "Left" or "Right"
-        local MobileButton = New("TextButton", {
-            BackgroundColor3 = Library.Scheme.Section,
-            AnchorPoint = Vector2.new(Side == "Left" and 0 or 1, 1),
-            Position = UDim2.new(Side == "Left" and 0 or 1, Side == "Left" and 12 or -12, 1, -12),
-            Size = UDim2.fromOffset(42, 42),
-            Font = F.Brand,
-            TextSize = 16,
-            Text = "o",
-            TextColor3 = Library.Scheme.ActiveText,
-            BorderSizePixel = 0,
-            ZIndex = 40,
-            Parent = Wrapper,
-        })
-        New("UICorner", { CornerRadius = UDim.new(1, 0), Parent = MobileButton })
-        local MStroke = New("UIStroke", { Thickness = 1, Parent = MobileButton })
-        S(MStroke, "Color", "Border")
-        GiveSignal(MobileButton.MouseButton1Click:Connect(function()
-            Frame.Visible = not Frame.Visible
-        end))
+    -- obsidian's draggable "Toggle" + "Lock" buttons --------------------------
+    -- small rounded chips that float on the screen edge (default: top-left),
+    -- can be dragged anywhere, toggle the window and lock window dragging --
+    -- exactly like the original library's mobile buttons.
+    if Info.ShowMobileButtons ~= false then
+        local Side = (Info.MobileButtonsSide == "Right") and "Right" or "Left"
+
+        local function MeasureText(Text, Size)
+            local Ok, W, H = pcall(function()
+                local Params = Instance.new("GetTextBoundsParams")
+                Params.Text = Text
+                Params.Font = Font.fromEnum(Enum.Font.Code)
+                Params.Size = Size
+                return TextService:GetTextBoundsAsync(Params)
+            end)
+            if Ok and type(W) == "number" and type(H) == "number" then
+                return W, H
+            end
+            return #tostring(Text) * Size * 0.62, Size * 1.4
+        end
+
+        local function MakeDraggableButton(Text, OnClick)
+            local W, H = MeasureText(Text, 16)
+            local Button = New("TextButton", {
+                BackgroundColor3 = Library.Scheme.Background,
+                BorderSizePixel = 0,
+                Size = UDim2.fromOffset(math.floor(W * 2), math.floor(H * 2)),
+                Font = F.Brand,
+                TextSize = 16,
+                Text = Text,
+                TextColor3 = Library.Scheme.ActiveText,
+                AutoButtonColor = false,
+                ZIndex = 60,
+                Parent = Wrapper,
+            })
+            New("UICorner", { CornerRadius = UDim.new(0, Library.CornerRadius), Parent = Button })
+            local BStroke = New("UIStroke", { Thickness = 1, Parent = Button })
+            S(BStroke, "Color", "Border")
+            S(Button, "BackgroundColor3", "Background")
+
+            -- drag it around; a click only counts if the button barely moved
+            local PressPos
+            MakeDraggable(Button, Button)
+            GiveSignal(Button.InputBegan:Connect(function(IO)
+                if IO.UserInputType == Enum.UserInputType.MouseButton1
+                or IO.UserInputType == Enum.UserInputType.Touch then
+                    PressPos = Button.Position
+                end
+            end))
+            GiveSignal(Button.MouseButton1Click:Connect(function()
+                if PressPos and (Button.Position.X.Offset - PressPos.X.Offset) ^ 2
+                + (Button.Position.Y.Offset - PressPos.Y.Offset) ^ 2 > 100 then
+                    return
+                end
+                SafeCallback(OnClick)
+            end))
+
+            local Handle = { Button = Button }
+            function Handle:SetText(NewText)
+                local NW, NH = MeasureText(NewText, 16)
+                Button.Text = NewText
+                Button.Size = UDim2.fromOffset(math.floor(NW * 2), math.floor(NH * 2))
+            end
+            return Handle
+        end
+
+        local ToggleHandle = MakeDraggableButton("Toggle", function()
+            Window:Toggle()
+        end)
+        local LockHandle
+        LockHandle = MakeDraggableButton("Lock", function()
+            Library.CantDrag = not Library.CantDrag
+            LockHandle:SetText(Library.CantDrag and "Unlock" or "Lock")
+        end)
+
+        local BaseX = (Side == "Left") and 6 or -6
+        local BaseAnchor = (Side == "Left") and 0 or 1
+        ToggleHandle.Button.AnchorPoint = Vector2.new(BaseAnchor, 0)
+        ToggleHandle.Button.Position = UDim2.new(Side == "Left" and 0 or 1, BaseX, 0, 6)
+        LockHandle.Button.AnchorPoint = Vector2.new(BaseAnchor, 0)
+        LockHandle.Button.Position = UDim2.new(
+            Side == "Left" and 0 or 1,
+            BaseX + (Side == "Left" and (ToggleHandle.Button.Size.X.Offset + 12)
+                or -(ToggleHandle.Button.Size.X.Offset + 12)),
+            0, 6
+        )
+        Window.ToggleButton = ToggleHandle
+        Window.LockButton = LockHandle
+        Library.ToggleButton = ToggleHandle
+        Library.LockButton = LockHandle
     end
 
     Library:InitHUDArea()
@@ -1583,7 +1850,7 @@ local function CreateGroupbox(Tab, Name, Side, Info)
         Position = UDim2.fromOffset(15, -5),
         Size = UDim2.new(0, 120, 0, 10),
         Font = F.Row,
-        TextSize = 12,
+        TextSize = 13,
         TextXAlignment = Enum.TextXAlignment.Left,
         Text = Name,
         TextColor3 = Library.Scheme.Accent,
@@ -1653,7 +1920,7 @@ local function CreateGroupbox(Tab, Name, Side, Info)
             Size = UDim2.new(1, 0, 0, 0),
             AutomaticSize = Enum.AutomaticSize.Y,
             Font = F.Small,
-            TextSize = 12,
+            TextSize = 13,
             TextWrapped = true,
             TextXAlignment = Enum.TextXAlignment.Left,
             Text = Info.Description,
@@ -1764,7 +2031,7 @@ local function CreateTabbox(Tab, Side)
             Size = UDim2.new(0, 0, 1, 0),
             AutomaticSize = Enum.AutomaticSize.X,
             Font = F.Row,
-            TextSize = 12,
+            TextSize = 13,
             Text = Name or "Tab",
             TextColor3 = Library.Scheme.InactiveText,
             Parent = Tabbox.Strip,
@@ -1859,7 +2126,7 @@ local function CreateRow(Container, Info, Height, RightReserve)
             and Enum.TextYAlignment.Top
             or Enum.TextYAlignment.Center,
         Font = F.Row,
-        TextSize = 12,
+        TextSize = 13,
         TextXAlignment = Enum.TextXAlignment.Left,
         Text = Info.Text or "",
         Parent = Row,
@@ -2329,7 +2596,7 @@ local function CreateButton(Container, A, B)
             BorderSizePixel = 0,
             Size = UDim2.new(1, 0, 1, 0),
             Font = F.Row,
-            TextSize = 12,
+            TextSize = 13,
             Text = ButtonInfo.Text or "button",
             TextXAlignment = Enum.TextXAlignment.Left,
             AutoButtonColor = false,
@@ -2508,7 +2775,7 @@ local function CreateSlider(Container, Idx, Info)
     RowObj.Title.Parent = Head
     local HeadDiv = New("Frame", {
         Size = UDim2.fromOffset(1, 8),
-        BackgroundTransparency = 0.5,
+        BackgroundTransparency = 0.35,
         BorderSizePixel = 0,
         Parent = Head,
     })
@@ -2518,7 +2785,7 @@ local function CreateSlider(Container, Idx, Info)
         Size = UDim2.new(0, 0, 1, 0),
         AutomaticSize = Enum.AutomaticSize.X,
         Font = F.Row,
-        TextSize = 12,
+        TextSize = 13,
         TextXAlignment = Enum.TextXAlignment.Left,
         Text = "",
         Parent = Head,
@@ -2652,7 +2919,7 @@ local function CreateInput(Container, Idx, Info)
         Position = UDim2.new(0, 0, 0, 16),
         Size = UDim2.new(1, 0, 0, 16),
         Font = F.Row,
-        TextSize = 12,
+        TextSize = 13,
         Text = tostring(Info.Default or ""),
         PlaceholderText = Info.Placeholder or "",
         PlaceholderColor3 = Library.Scheme.InactiveText,
@@ -2844,7 +3111,7 @@ local function CreateDropdown(Container, Idx, Info)
         BackgroundTransparency = 1,
         Size = UDim2.new(1, -22, 1, 0),
         Font = F.Row,
-        TextSize = 12,
+        TextSize = 13,
         TextXAlignment = Enum.TextXAlignment.Left,
         TextTruncate = Enum.TextTruncate.AtEnd,
         Text = "",
@@ -2986,9 +3253,11 @@ local function CreateDropdown(Container, Idx, Info)
             local IsSelected = Object.Multi and Object.Value[Opt.Key] or (Object.Value == Opt.Key)
             local IsDisabled = DisabledSet[Opt.Key] or DisabledSet[Opt.Label]
 
+            -- obsidian selection style: highlighted row background + full
+            -- brightness text (no check image next to the item)
             local OptButton = New("TextButton", {
-                BackgroundTransparency = 1,
-                BackgroundColor3 = Library.Scheme.Highlight,
+                BackgroundColor3 = Library.Scheme.PanelBackground,
+                BackgroundTransparency = IsSelected and 0 or 1,
                 BorderSizePixel = 0,
                 Size = UDim2.new(1, 0, 0, 18),
                 LayoutOrder = RowCount,
@@ -2996,33 +3265,41 @@ local function CreateDropdown(Container, Idx, Info)
                 AutoButtonColor = false,
                 Parent = ListFrame,
             })
+            S(OptButton, "BackgroundColor3", "PanelBackground")
             New("UICorner", { CornerRadius = UDim.new(0, 3), Parent = OptButton })
             local OptLabel = New("TextLabel", {
                 BackgroundTransparency = 1,
                 Position = UDim2.fromOffset(8, 0),
-                Size = UDim2.new(1, -28, 1, 0),
+                Size = UDim2.new(1, -16, 1, 0),
                 Font = F.Row,
-                TextSize = 12,
+                TextSize = 13,
                 TextXAlignment = Enum.TextXAlignment.Left,
                 TextTruncate = Enum.TextTruncate.AtEnd,
                 Text = tostring(Opt.Label),
-                TextTransparency = IsDisabled and 0.55 or 0,
-                TextColor3 = IsSelected and Library.Scheme.Accent or Library.Scheme.InactiveText,
+                TextTransparency = IsDisabled and 0.55 or (IsSelected and 0 or 0.5),
+                TextColor3 = IsSelected and Library.Scheme.ActiveText or Library.Scheme.InactiveText,
                 Parent = OptButton,
             })
             if IsSelected then
-                local Check = MakeCheck(9, "Accent")
-                Check.AnchorPoint = Vector2.new(1, 0.5)
-                Check.Position = UDim2.new(1, -4, 0.5, 0)
-                Check.Parent = OptButton
+                S(OptLabel, "TextColor3", "ActiveText")
+            else
+                S(OptLabel, "TextColor3", "InactiveText")
+            end
+            local function ApplyHover(Hover)
+                if IsDisabled then
+                    return
+                end
+                if IsSelected then
+                    OptButton.BackgroundTransparency = 0
+                else
+                    Tween(OptButton, Hover and 0.08 or 0.12, { BackgroundTransparency = Hover and 0.5 or 1 })
+                end
             end
             GiveSignal(OptButton.MouseEnter:Connect(function()
-                if not IsDisabled then
-                    Tween(OptButton, 0.08, { BackgroundTransparency = 0.5 })
-                end
+                ApplyHover(true)
             end))
             GiveSignal(OptButton.MouseLeave:Connect(function()
-                Tween(OptButton, 0.12, { BackgroundTransparency = 1 })
+                ApplyHover(false)
             end))
             GiveSignal(OptButton.MouseButton1Click:Connect(function()
                 if IsDisabled then
@@ -3067,7 +3344,7 @@ local function CreateDropdown(Container, Idx, Info)
                 Position = UDim2.fromOffset(8, 0),
                 Size = UDim2.new(1, -8, 1, 0),
                 Font = F.Row,
-                TextSize = 12,
+                TextSize = 13,
                 TextXAlignment = Enum.TextXAlignment.Left,
                 Text = "clear",
                 TextColor3 = Library.Scheme.Red,
@@ -3100,7 +3377,7 @@ local function CreateDropdown(Container, Idx, Info)
                 BorderSizePixel = 0,
                 Size = UDim2.new(1, 0, 0, 18),
                 Font = F.Small,
-                TextSize = 12,
+                TextSize = 13,
                 Text = "",
                 PlaceholderText = "search...",
                 PlaceholderColor3 = Library.Scheme.InactiveText,
@@ -3153,7 +3430,7 @@ local function CreateDropdown(Container, Idx, Info)
         local PStroke = New("UIStroke", { Thickness = 1, Parent = Popup })
         S(PStroke, "Color", "Border")
         New("UIPadding", {
-            PaddingTop = UDim.new(0, 4), PaddingBottom = UDim.new(0, 4),
+            PaddingTop = UDim.new(0, 4), PaddingBottom = UDim.new(0, 6),
             PaddingLeft = UDim.new(0, 4), PaddingRight = UDim.new(0, 4),
             Parent = Popup,
         })
@@ -3290,6 +3567,7 @@ AttachColorPicker = function(ParentObject, RowObj, Idx, Info)
     local function UpdateSwatch()
         Swatch.BackgroundColor3 = Object.Value
     end
+    Object.Swatch = Swatch
 
     function Object:SetValueRGB(Color, Silent)
         self.Value = Color3.new(
@@ -3342,7 +3620,7 @@ AttachColorPicker = function(ParentObject, RowObj, Idx, Info)
                 BackgroundTransparency = 1,
                 Size = UDim2.new(1, 0, 0, 12),
                 Font = F.Row,
-                TextSize = 12,
+                TextSize = 13,
                 TextXAlignment = Enum.TextXAlignment.Left,
                 Text = tostring(Info.Title),
                 LayoutOrder = 0,
@@ -3601,13 +3879,13 @@ AttachKeyPicker = function(ParentObject, RowObj, Idx, Info)
     -- skeet chip: right-aligned compact box showing just the key name
     local Chip = New("TextButton", {
         AnchorPoint = Vector2.new(1, 0.5),
-        Size = UDim2.fromOffset(0, 12),
+        Size = UDim2.fromOffset(0, 14),
         AutomaticSize = Enum.AutomaticSize.X,
         BackgroundColor3 = Library.Scheme.Background,
         BorderSizePixel = 0,
         AutoButtonColor = false,
         Font = F.Row,
-        TextSize = 12,
+        TextSize = 13,
         Text = "",
         TextColor3 = Library.Scheme.DarkText,
         ZIndex = 2,
@@ -3874,7 +4152,7 @@ function Library:InitKeybindFrame()
         BackgroundTransparency = 1,
         AnchorPoint = Vector2.new(0, 0.5),
         Position = UDim2.new(0, 15, 0.5, 0),
-        Size = UDim2.fromOffset(74, 20),
+        Size = UDim2.fromOffset(86, 20),
         Visible = false,
         ZIndex = 30,
         Parent = Wrapper,
@@ -3935,7 +4213,7 @@ function Library:InitKeybindFrame()
         Position = UDim2.fromOffset(26, 0),
         Size = UDim2.new(1, -26, 1, 0),
         Font = F.Row,
-        TextSize = 12,
+        TextSize = 13,
         TextXAlignment = Enum.TextXAlignment.Left,
         Text = "hotkeys",
         TextColor3 = Color3.new(1, 1, 1),
@@ -3959,10 +4237,13 @@ function Library:InitKeybindFrame()
     end)
 
     local function MakeBindRow()
+        -- auto-width row: the code font at 13px needs room for longer bind
+        -- names, so the row grows with its label instead of clipping
         local RowFrame = New("Frame", {
             BackgroundTransparency = 1,
             Position = UDim2.fromOffset(0, 24),
-            Size = UDim2.fromOffset(74, 18),
+            Size = UDim2.fromOffset(86, 18),
+            AutomaticSize = Enum.AutomaticSize.X,
             Visible = false,
             ZIndex = 9,
             Parent = Panel,
@@ -3992,7 +4273,8 @@ function Library:InitKeybindFrame()
             BackgroundTransparency = 0.2,
             BorderSizePixel = 0,
             Position = UDim2.fromOffset(1, 1),
-            Size = UDim2.new(1, -2, 1, -2),
+            Size = UDim2.new(0, 84, 1, -2),
+            AutomaticSize = Enum.AutomaticSize.X,
             ZIndex = 10,
             Parent = RowFrame,
         })
@@ -4008,7 +4290,7 @@ function Library:InitKeybindFrame()
             Size = UDim2.new(0, 0, 1, 0),
             AutomaticSize = Enum.AutomaticSize.X,
             Font = F.Row,
-            TextSize = 12,
+            TextSize = 13,
             TextXAlignment = Enum.TextXAlignment.Left,
             Text = "",
             TextColor3 = Library.Scheme.ActiveText,
@@ -4270,7 +4552,7 @@ function Library:Notify(...)
             Size = UDim2.new(0, 0, 1, 0),
             AutomaticSize = Enum.AutomaticSize.X,
             Font = F.Row,
-            TextSize = 12,
+            TextSize = 13,
             TextXAlignment = Enum.TextXAlignment.Left,
             Text = Data.Title,
             TextColor3 = Data.TitleColor or Library.Scheme.White,
@@ -4285,7 +4567,7 @@ function Library:Notify(...)
             Size = UDim2.new(0, 0, 1, 0),
             AutomaticSize = Enum.AutomaticSize.X,
             Font = F.Small,
-            TextSize = 12,
+            TextSize = 13,
             TextXAlignment = Enum.TextXAlignment.Left,
             Text = Data.Description,
             TextColor3 = Library.Scheme.ActiveText,
@@ -4371,7 +4653,7 @@ function Library:AddDraggableLabel(Text)
         Size = UDim2.fromOffset(0, 0),
         AutomaticSize = Enum.AutomaticSize.XY,
         Font = F.Row,
-        TextSize = 12,
+        TextSize = 13,
         TextColor3 = Library.Scheme.ActiveText,
         Text = Text or "",
         ZIndex = 30,
