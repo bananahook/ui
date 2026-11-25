@@ -11265,6 +11265,11 @@ function Library:Notify(...)
     end
     Data.Destroyed = false
 
+    --// bananahook: brand the title -- "banana" in white, "hook" in banana-yellow \--
+    if Data.Title and Data.TitleColor == nil and Data.Title:lower() == "bananahook" then
+        Data.Title = '<font color="#FFFFFF">banana</font><font color="#FFD517">hook</font>'
+    end
+
     local DeletedInstance = false
     local DeleteConnection = nil
     if typeof(Data.Time) == "Instance" then
@@ -11303,6 +11308,28 @@ function Library:Notify(...)
     )
     Library:AddOutline(Holder)
 
+    --// bananahook: left accent stripe with a soft glow \--
+    local NotifyStripe = New("Frame", {
+        AnchorPoint = Vector2.new(0, 0.5),
+        BackgroundColor3 = "AccentColor",
+        BorderSizePixel = 0,
+        Position = UDim2.new(0, 5, 0.5, 0),
+        Size = UDim2.new(0, 3, 1, -10),
+        ZIndex = 6,
+        Parent = Holder,
+    })
+    New("UICorner", {
+        CornerRadius = UDim.new(1, 0),
+        Parent = NotifyStripe,
+    })
+    New("UIStroke", {
+        Color = "AccentColor",
+        Thickness = 2,
+        Transparency = 0.65,
+        ZIndex = 6,
+        Parent = NotifyStripe,
+    })
+
     local ContentHolder = New("Frame", {
         AutomaticSize = Enum.AutomaticSize.Y,
         BackgroundTransparency = 1,
@@ -11313,9 +11340,10 @@ function Library:Notify(...)
         Padding = UDim.new(0, 4),
         Parent = ContentHolder,
     })
+    --// bananahook: extra left padding so the text clears the accent stripe \--
     New("UIPadding", {
         PaddingBottom = UDim.new(0, 8),
-        PaddingLeft = UDim.new(0, 8),
+        PaddingLeft = UDim.new(0, 15),
         PaddingRight = UDim.new(0, 8),
         PaddingTop = UDim.new(0, 8),
         Parent = ContentHolder,
@@ -11421,7 +11449,8 @@ function Library:Notify(...)
             Position = UDim2.new(0, (IconLabel and 21 or 0), 0.5, 0),
             Size = UDim2.fromScale(0, 0),
             Text = Data.Title,
-            TextColor3 = Data.TitleColor or "FontColor",
+            RichText = true, --// bananahook: lets the title carry per-word colors (banana / hook) \--
+            TextColor3 = Data.TitleColor or "AccentColor", --// bananahook: titles pop in the accent color \--
             TextSize = 15,
             TextXAlignment = Enum.TextXAlignment.Left,
             TextYAlignment = Enum.TextYAlignment.Center,
@@ -11450,7 +11479,7 @@ function Library:Notify(...)
         local CloseWidth = Data.Closable and 20 or 0
         local MaxTextWidth = math.max(
             40,
-            (NotificationArea.AbsoluteSize.X / Library.DPIScale) - 24 - ExtraWidth - CloseWidth
+            (NotificationArea.AbsoluteSize.X / Library.DPIScale) - 31 - ExtraWidth - CloseWidth
         )
 
         if Title then
@@ -11466,7 +11495,7 @@ function Library:Notify(...)
             DescX = X
         end
 
-        FakeBackground.Size = UDim2.fromOffset(math.max(TitleX, DescX) + 24 + ExtraWidth + CloseWidth, 0)
+        FakeBackground.Size = UDim2.fromOffset(math.max(TitleX, DescX) + 31 + ExtraWidth + CloseWidth, 0)
 
         if Library.Notifications[FakeBackground] then
             task.defer(function()
@@ -11564,14 +11593,22 @@ function Library:Notify(...)
         BackgroundColor3 = "BackgroundColor",
         BorderColor3 = "OutlineColor",
         BorderSizePixel = 1,
-        Position = UDim2.fromOffset(0, 3),
-        Size = UDim2.new(1, 0, 0, 2),
+        Position = UDim2.fromOffset(0, 2),
+        Size = UDim2.new(1, 0, 0, 3),
         Parent = TimerHolder,
+    })
+    New("UICorner", { --// bananahook: pill-shaped timer bar \--
+        CornerRadius = UDim.new(1, 0),
+        Parent = TimerBar,
     })
     TimerFill = New("Frame", {
         BackgroundColor3 = "AccentColor",
         Size = UDim2.fromScale(1, 1),
         Parent = TimerBar,
+    })
+    New("UICorner", {
+        CornerRadius = UDim.new(1, 0),
+        Parent = TimerFill,
     })
 
     if typeof(Data.Time) == "Instance" then
