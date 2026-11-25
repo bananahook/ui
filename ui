@@ -298,7 +298,7 @@ local Library = {
 
     NotifyOnError = false,
     ShowCustomCursor = true,
-    ForceCheckbox = false,
+    ForceCheckbox = true, --// bananahook: toggles render as flat checkboxes (linoria-style); set false for the pill switch \--
 
     CantDragForced = false,
     DraggableElements = {},
@@ -4510,9 +4510,9 @@ do
         end
 
         local Picker = New("TextButton", {
-            BackgroundColor3 = "MainColor",
+            BackgroundTransparency = 1, --// bananahook: flat bracketed-text keybind chip, e.g. [MB2] \--
             Size = UDim2.fromOffset(21, 21),
-            Text = (IsForButton and SlideOverflow) and "" or KeyPicker.Value,
+            Text = (IsForButton and SlideOverflow) and "" or ("[" .. KeyPicker.Value .. "]"),
             TextSize = 14,
             TextTransparency = 0.4,
             Parent = ToggleLabel,
@@ -4531,19 +4531,6 @@ do
                 Parent = Picker,
             })
         end
-
-        New("UIStroke", {
-            Color = "OutlineColor",
-            Parent = Picker,
-        })
-
-        local PickerCorner = New("UICorner", {
-            TopLeftRadius = UDim.new(0, Library.CornerRadius / 2),
-            TopRightRadius = UDim.new(0, Library.CornerRadius / 2),
-            BottomRightRadius = UDim.new(0, Library.CornerRadius / 2),
-            BottomLeftRadius = UDim.new(0, Library.CornerRadius / 2),
-            Parent = Picker,
-        }); table.insert(Library.SpecificCorners, PickerCorner)
 
         local PickerHoverTween = nil
 
@@ -4664,28 +4651,26 @@ do
                     Parent = Checkbox,
                 })
             )
-            New("UIStroke", {
+            local CheckboxStroke = New("UIStroke", {
                 Color = "OutlineColor",
                 Parent = Checkbox,
             })
 
-            local CheckImage = Library:CreateIcon(CheckIcon, {
-                ImageColor3 = "FontColor",
-                ImageTransparency = 1,
-                Position = UDim2.fromOffset(2, 2),
-                Size = UDim2.new(1, -4, 1, -4),
-                Parent = Checkbox,
-            })
-
+            --// bananahook: flat solid-fill checkbox, no checkmark (linoria-style) \--
             function KeybindsToggle:Display(State)
+                local On = State == true
+
                 if KeyPicker.Mode == "Press" then
                     Label.TextTransparency = 0.4
-                    SetIconProperties(CheckImage, { ImageTransparency = 1 })
-                    return
+                    On = false
+                else
+                    Label.TextTransparency = State and 0 or 0.5
                 end
 
-                Label.TextTransparency = State and 0 or 0.5
-                SetIconProperties(CheckImage, { ImageTransparency = State and 0 or 1 })
+                Checkbox.BackgroundColor3 = On and Library.Scheme.AccentColor or Library.Scheme.MainColor
+                Library.Registry[Checkbox].BackgroundColor3 = On and "AccentColor" or "MainColor"
+                CheckboxStroke.Color = On and Library.Scheme.AccentColor or Library.Scheme.OutlineColor
+                Library.Registry[CheckboxStroke].Color = On and "AccentColor" or "OutlineColor"
             end
 
             function KeybindsToggle:SetText(Text)
@@ -4969,7 +4954,8 @@ do
                 return
             end
 
-            local DisplayText = PickerText or KeyPicker.DisplayValue
+            --// bananahook: bracketed chip text, e.g. [G] \--
+            local DisplayText = "[" .. (PickerText or KeyPicker.DisplayValue) .. "]"
             if IsForButton and SlideOverflow then
                 local X, _Y = Library:GetTextBounds(
                     DisplayText,
@@ -5274,8 +5260,8 @@ do
             if IsForButton and SlideOverflow then
                 KeyPicker:Display("...")
             else
-                Picker.Text = "..."
-                Picker.Size = IsForButton and UDim2.new(0, 29, 1, 0) or UDim2.fromOffset(29, 21)
+                Picker.Text = "[...]" --// bananahook: bracketed picking placeholder, matches the [G] chip style \--
+                Picker.Size = IsForButton and UDim2.new(0, 35, 1, 0) or UDim2.fromOffset(35, 21) --// bananahook: wider to fit the brackets \--
             end
 
             -- Wait for any input --
@@ -7676,31 +7662,26 @@ do
             Parent = Checkbox,
         })
 
-        local CheckImage = Library:CreateIcon(CheckIcon, {
-            ImageColor3 = "FontColor",
-            ImageTransparency = 1,
-            Position = UDim2.fromOffset(2, 2),
-            Size = UDim2.new(1, -4, 1, -4),
-            Parent = Checkbox,
-        })
-
         function Toggle:UpdateColors()
             Toggle:Display()
         end
 
+        --// bananahook: flat checkbox -- solid accent fill when on, no checkmark (linoria-style) \--
         function Toggle:Display()
             if Library.Unloaded then
                 return
             end
 
             CheckboxStroke.Transparency = Toggle.Disabled and 0.5 or 0
+            Checkbox.BackgroundTransparency = Toggle.Disabled and 0.75 or 0
 
             if Toggle.Disabled then
                 Label.TextTransparency = 0.8
-                SetIconProperties(CheckImage, { ImageTransparency = Toggle.Value and 0.8 or 1 })
 
-                Checkbox.BackgroundColor3 = Library.Scheme.BackgroundColor
-                Library.Registry[Checkbox].BackgroundColor3 = "BackgroundColor"
+                Checkbox.BackgroundColor3 = Toggle.Value and Library.Scheme.AccentColor or Library.Scheme.MainColor
+                Library.Registry[Checkbox].BackgroundColor3 = Toggle.Value and "AccentColor" or "MainColor"
+                CheckboxStroke.Color = Toggle.Value and Library.Scheme.AccentColor or Library.Scheme.OutlineColor
+                Library.Registry[CheckboxStroke].Color = Toggle.Value and "AccentColor" or "OutlineColor"
 
                 return
             end
@@ -7708,10 +7689,11 @@ do
             TweenService:Create(Label, Library.TweenInfo, {
                 TextTransparency = Toggle.Value and 0 or 0.4,
             }):Play()
-            TweenIcon(CheckImage, { ImageTransparency = Toggle.Value and 0 or 1 })
 
-            Checkbox.BackgroundColor3 = Library.Scheme.MainColor
-            Library.Registry[Checkbox].BackgroundColor3 = "MainColor"
+            Checkbox.BackgroundColor3 = Toggle.Value and Library.Scheme.AccentColor or Library.Scheme.MainColor
+            Library.Registry[Checkbox].BackgroundColor3 = Toggle.Value and "AccentColor" or "MainColor"
+            CheckboxStroke.Color = Toggle.Value and Library.Scheme.AccentColor or Library.Scheme.OutlineColor
+            Library.Registry[CheckboxStroke].Color = Toggle.Value and "AccentColor" or "OutlineColor"
         end
 
         function Toggle:OnChanged(Func)
@@ -11308,28 +11290,6 @@ function Library:Notify(...)
     )
     Library:AddOutline(Holder)
 
-    --// bananahook: left accent stripe with a soft glow \--
-    local NotifyStripe = New("Frame", {
-        AnchorPoint = Vector2.new(0, 0.5),
-        BackgroundColor3 = "AccentColor",
-        BorderSizePixel = 0,
-        Position = UDim2.new(0, 5, 0.5, 0),
-        Size = UDim2.new(0, 3, 1, -10),
-        ZIndex = 6,
-        Parent = Holder,
-    })
-    New("UICorner", {
-        CornerRadius = UDim.new(1, 0),
-        Parent = NotifyStripe,
-    })
-    New("UIStroke", {
-        Color = "AccentColor",
-        Thickness = 2,
-        Transparency = 0.65,
-        ZIndex = 6,
-        Parent = NotifyStripe,
-    })
-
     local ContentHolder = New("Frame", {
         AutomaticSize = Enum.AutomaticSize.Y,
         BackgroundTransparency = 1,
@@ -11340,10 +11300,9 @@ function Library:Notify(...)
         Padding = UDim.new(0, 4),
         Parent = ContentHolder,
     })
-    --// bananahook: extra left padding so the text clears the accent stripe \--
     New("UIPadding", {
         PaddingBottom = UDim.new(0, 8),
-        PaddingLeft = UDim.new(0, 15),
+        PaddingLeft = UDim.new(0, 8),
         PaddingRight = UDim.new(0, 8),
         PaddingTop = UDim.new(0, 8),
         Parent = ContentHolder,
@@ -11479,7 +11438,7 @@ function Library:Notify(...)
         local CloseWidth = Data.Closable and 20 or 0
         local MaxTextWidth = math.max(
             40,
-            (NotificationArea.AbsoluteSize.X / Library.DPIScale) - 31 - ExtraWidth - CloseWidth
+            (NotificationArea.AbsoluteSize.X / Library.DPIScale) - 24 - ExtraWidth - CloseWidth
         )
 
         if Title then
@@ -11495,7 +11454,7 @@ function Library:Notify(...)
             DescX = X
         end
 
-        FakeBackground.Size = UDim2.fromOffset(math.max(TitleX, DescX) + 31 + ExtraWidth + CloseWidth, 0)
+        FakeBackground.Size = UDim2.fromOffset(math.max(TitleX, DescX) + 24 + ExtraWidth + CloseWidth, 0)
 
         if Library.Notifications[FakeBackground] then
             task.defer(function()
@@ -11872,18 +11831,16 @@ function Library:CreateWindow(WindowInfo)
                         Parent = Checkbox,
                     })
                 )
-                New("UIStroke", {
+                local CheckboxStroke = New("UIStroke", {
                     Color = "OutlineColor",
                     Parent = Checkbox,
                 })
 
-                Library:CreateIcon(CheckIcon, {
-                    ImageColor3 = "FontColor",
-                    ImageTransparency = Visible and 0 or 1,
-                    Position = UDim2.fromOffset(2, 2),
-                    Size = UDim2.new(1, -4, 1, -4),
-                    Parent = Checkbox,
-                })
+                --// bananahook: flat solid-fill checkbox, no checkmark (linoria-style) \--
+                Checkbox.BackgroundColor3 = Visible and Library.Scheme.AccentColor or Library.Scheme.MainColor
+                Library.Registry[Checkbox].BackgroundColor3 = Visible and "AccentColor" or "MainColor"
+                CheckboxStroke.Color = Visible and Library.Scheme.AccentColor or Library.Scheme.OutlineColor
+                Library.Registry[CheckboxStroke].Color = Visible and "AccentColor" or "OutlineColor"
 
                 Holder.MouseButton1Click:Connect(function()
                     local Picker = Options[Idx]
