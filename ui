@@ -2002,7 +2002,7 @@ do
 end
 
 --// Icons \\--
-local CheckIcon, ArrowIcon, ResizeIcon, KeyIcon, MoveIcon, PopOutIcon, CloseIcon, SettingsIcon
+local CheckIcon, ArrowIcon, ResizeIcon, KeyIcon, MoveIcon, PopOutIcon, CloseIcon, SettingsIcon, MinimizeIcon --// bananahook: lucide "minus" glyph feeds the window minimize control \--
 function Library:SetIconModule(module: IconModule)
     FetchIcons = true
     Icons = module
@@ -2015,6 +2015,7 @@ function Library:SetIconModule(module: IconModule)
     PopOutIcon = Library:GetIcon("square-arrow-down-left")
     CloseIcon = Library:GetIcon("x")
     SettingsIcon = Library:GetIcon("settings")
+    MinimizeIcon = Library:GetIcon("minus") --// bananahook: refreshes together with the stock icons \--
 end
 
 local OnlineFetchIcons, OnlineIcons = pcall(function()
@@ -3705,6 +3706,146 @@ do
     end
 end
 
+--// bananahook: live watermark -- upstream deprecated theirs; this one is a draggable banana pill with brand + fps / ping / clock, built on stock AddDraggableLabel so it drags, scales and outlines for free \--
+do
+    local WatermarkLabel
+    local WatermarkAuto = false
+    local FrameCount, FrameAccum, SlowAccum = 0, 0, 0
+    local FPSText, PingText, ClockText = "-- fps", "-- ms", "--:--:--"
+
+    local function FormatWatermark()
+        local Dim = Library.Scheme.FontColor
+        Dim = typeof(Dim) == "Color3" and Dim:Lerp(Color3.new(0, 0, 0), 0.45) or Color3.fromRGB(158, 158, 158)
+
+        return '<font color="#FFFFFF">banana</font><font color="#FFD517">hook</font>'
+            .. string.format('  <font color="#%s">%s | %s | %s</font>', Dim:ToHex(), FPSText, PingText, ClockText)
+    end
+
+    local function RefreshPing()
+        local OK, Ping = pcall(function()
+            local Stats = game:GetService("Stats")
+            local Item = Stats.Network.ServerStatsItem:FindFirstChild("Data Ping")
+            return Item and math.floor(Item:GetValue() + 0.5)
+        end)
+
+        if OK and type(Ping) == "number" then
+            PingText = string.format("%d ms", Ping)
+        else
+            PingText = "-- ms"
+        end
+    end
+
+    local function RefreshClock()
+        local OK, Formatted = pcall(os.date, "%H:%M:%S")
+        if OK and type(Formatted) == "string" then
+            ClockText = Formatted
+        end
+    end
+
+    function Library:ToggleWatermark(State: boolean?)
+        if typeof(State) ~= "boolean" then
+            State = not (WatermarkLabel and WatermarkLabel.Label and WatermarkLabel.Label.Visible)
+        end
+
+        if State then
+            if not WatermarkLabel then
+                WatermarkLabel = Library:AddDraggableLabel("")
+                WatermarkLabel.Label.RichText = true
+                WatermarkLabel:SetIcon(Library.ImageManager.GetAsset("BananaIcon"))
+
+                -- a click (not a drag) on the pill restores a minimized window
+                local PressPosition
+                WatermarkLabel.Label.InputBegan:Connect(function(Input)
+                    if IsClickInput(Input) then
+                        PressPosition = Input.Position
+                    end
+                end)
+
+                WatermarkLabel.Label.InputEnded:Connect(function(Input)
+                    if not PressPosition then
+                        return
+                    end
+
+                    local Start = PressPosition
+                    PressPosition = nil
+
+                    if not (Input and Input.Position and Start) then
+                        return
+                    end
+
+                    local DX = math.abs(Input.Position.X - Start.X)
+                    local DY = math.abs(Input.Position.Y - Start.Y)
+
+                    if DX <= 6 and DY <= 6 and not Library.Unloaded and Library.Toggled == false then
+                        Library:Toggle(true)
+
+                        if WatermarkAuto then
+                            WatermarkAuto = false
+                            Library:ToggleWatermark(false)
+                        end
+                    end
+                end)
+
+                Library:GiveSignal(RunService.RenderStepped:Connect(function(Delta)
+                    if Library.Unloaded or not (WatermarkLabel and WatermarkLabel.Label and WatermarkLabel.Label.Visible) then
+                        FrameCount, FrameAccum, SlowAccum = 0, 0, 0
+                        return
+                    end
+
+                    FrameCount += 1
+                    if type(Delta) == "number" and Delta > 0 then
+                        FrameAccum += Delta
+                        SlowAccum += Delta
+                    end
+
+                    if FrameAccum >= 0.25 then
+                        local FPS = math.floor(FrameCount / FrameAccum + 0.5)
+                        if FPS < 0 then
+                            FPS = 0
+                        elseif FPS > 999 then
+                            FPS = 999
+                        end
+
+                        FPSText = string.format("%d fps", FPS)
+                        FrameCount, FrameAccum = 0, 0
+
+                        if SlowAccum >= 1 then
+                            SlowAccum = 0
+                            RefreshPing()
+                            RefreshClock()
+                        end
+
+                        WatermarkLabel:SetText(FormatWatermark())
+                    end
+                end))
+            end
+
+            RefreshPing()
+            RefreshClock()
+            FrameCount, FrameAccum, SlowAccum = 0, 0, 0
+            WatermarkLabel:SetText(FormatWatermark())
+            WatermarkLabel:SetVisible(true)
+        elseif WatermarkLabel then
+            WatermarkLabel:SetVisible(false)
+        end
+
+        return State
+    end
+
+    -- the window's "-" control: hide the window and pin the watermark; clicking the pill undoes it
+    function Library:Minimize()
+        if Library.Unloaded then
+            return
+        end
+
+        local Shown = WatermarkLabel and WatermarkLabel.Label and WatermarkLabel.Label.Visible
+        WatermarkAuto = not Shown
+
+        Library:Toggle(false)
+        Library:ToggleWatermark(true)
+    end
+end
+
 --// Context Menu \\--
 local CurrentMenu
 
@@ -4532,6 +4673,7 @@ do
             })
         end
 
+        --// bananahook: the chip carries no UIStroke -- flat text only \--
         local PickerHoverTween = nil
 
         local function ApplyPickerTextTransparency(Transparency: number)
@@ -4667,7 +4809,7 @@ do
                     Label.TextTransparency = State and 0 or 0.5
                 end
 
-                Checkbox.BackgroundColor3 = On and Library.Scheme.AccentColor or Library.Scheme.MainColor
+                Checkbox.BackgroundColor3 = On and Library.Scheme.AccentColor or Library.Scheme.MainColor --// bananahook: solid fill swap \--
                 Library.Registry[Checkbox].BackgroundColor3 = On and "AccentColor" or "MainColor"
                 CheckboxStroke.Color = On and Library.Scheme.AccentColor or Library.Scheme.OutlineColor
                 Library.Registry[CheckboxStroke].Color = On and "AccentColor" or "OutlineColor"
@@ -7678,6 +7820,7 @@ do
             if Toggle.Disabled then
                 Label.TextTransparency = 0.8
 
+                --// bananahook: fill swap keeps reading while disabled \--
                 Checkbox.BackgroundColor3 = Toggle.Value and Library.Scheme.AccentColor or Library.Scheme.MainColor
                 Library.Registry[Checkbox].BackgroundColor3 = Toggle.Value and "AccentColor" or "MainColor"
                 CheckboxStroke.Color = Toggle.Value and Library.Scheme.AccentColor or Library.Scheme.OutlineColor
@@ -7690,6 +7833,7 @@ do
                 TextTransparency = Toggle.Value and 0 or 0.4,
             }):Play()
 
+            --// bananahook: solid accent fill when on, dark square when off \--
             Checkbox.BackgroundColor3 = Toggle.Value and Library.Scheme.AccentColor or Library.Scheme.MainColor
             Library.Registry[Checkbox].BackgroundColor3 = Toggle.Value and "AccentColor" or "MainColor"
             CheckboxStroke.Color = Toggle.Value and Library.Scheme.AccentColor or Library.Scheme.OutlineColor
@@ -12100,8 +12244,8 @@ function Library:CreateWindow(WindowInfo)
         RightWrapper = New("Frame", {
             AnchorPoint = Vector2.new(1, 0.5),
             BackgroundTransparency = 1,
-            Position = UDim2.new(1, -49, 0.5, 0),
-            Size = UDim2.new(1, -InitialLeftWidth - 57 - 1, 1, -16),
+            Position = UDim2.new(1, -96, 0.5, 0), --// bananahook: shifted left to make room for the - / x window controls \--
+            Size = UDim2.new(1, -InitialLeftWidth - 104 - 1, 1, -16), --// bananahook: right edge follows the shifted position \--
             Parent = TopBar,
         })
 
@@ -12228,6 +12372,46 @@ function Library:CreateWindow(WindowInfo)
                 Parent = TopBar,
             })
         end
+
+        --// bananahook: window controls -- "x" hides the window (same as the menu keybind), "-" shrinks it to the live watermark \--
+        local function ControlHover(Icon)
+            Icon.MouseEnter:Connect(function()
+                TweenIcon(Icon, { ImageTransparency = 0 })
+            end)
+            Icon.MouseLeave:Connect(function()
+                TweenIcon(Icon, { ImageTransparency = 0.5 })
+            end)
+        end
+
+        local WindowCloseButton = Library:CreateIcon(CloseIcon, {
+            AnchorPoint = Vector2.new(1, 0.5),
+            ImageColor3 = "FontColor",
+            ImageTransparency = 0.5,
+            Name = "BananaClose",
+            Position = UDim2.new(1, -46, 0.5, 0),
+            Size = UDim2.fromOffset(18, 18),
+            ZIndex = 2,
+            Parent = TopBar,
+        }, true)
+        ControlHover(WindowCloseButton)
+        WindowCloseButton.MouseButton1Click:Connect(function()
+            Library:Toggle(false)
+        end)
+
+        local WindowMinimizeButton = Library:CreateIcon(MinimizeIcon, {
+            AnchorPoint = Vector2.new(1, 0.5),
+            ImageColor3 = "FontColor",
+            ImageTransparency = 0.5,
+            Name = "BananaMinimize",
+            Position = UDim2.new(1, -70, 0.5, 0),
+            Size = UDim2.fromOffset(18, 18),
+            ZIndex = 2,
+            Parent = TopBar,
+        }, true)
+        ControlHover(WindowMinimizeButton)
+        WindowMinimizeButton.MouseButton1Click:Connect(function()
+            Library:Minimize()
+        end)
 
         --// Bottom Bar \\--
         local BottomClip = New("Frame", {
@@ -15589,6 +15773,31 @@ function Library:CreateWindow(WindowInfo)
             end)
         else
             MainFrame.Visible = Library.Toggled
+
+            --// bananahook: pop-in -- the window scales open from ~94% with a back-out overshoot; closing stays instant like stock \--
+            if Library.Toggled then
+                local TargetPosition, TargetSize = MainFrame.Position, MainFrame.Size
+                local GrowX = math.floor(TargetSize.X.Offset * 0.03 + 0.5)
+                local GrowY = math.floor(TargetSize.Y.Offset * 0.03 + 0.5)
+
+                MainFrame.Position = UDim2.new(
+                    TargetPosition.X.Scale,
+                    TargetPosition.X.Offset - GrowX,
+                    TargetPosition.Y.Scale,
+                    TargetPosition.Y.Offset - GrowY
+                )
+                MainFrame.Size = UDim2.new(
+                    TargetSize.X.Scale,
+                    TargetSize.X.Offset - GrowX * 2,
+                    TargetSize.Y.Scale,
+                    TargetSize.Y.Offset - GrowY * 2
+                )
+
+                TweenService:Create(MainFrame, TweenInfo.new(0.24, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+                    Position = TargetPosition,
+                    Size = TargetSize,
+                }):Play()
+            end
         end
 
         if WindowInfo.UnlockMouseWhileOpen then
